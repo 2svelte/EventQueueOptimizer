@@ -31,7 +31,7 @@ recommendations will be modeled estimates, not validated service guarantees.
 
 ## 15-minute SQL analysis
 
-Install the SQL dependency with `python -m pip install -r requirements.txt`.
+Install the project dependencies with `python -m pip install -r requirements.txt`.
 From the repository root, execute the query with DuckDB:
 
 ```shell
@@ -51,9 +51,64 @@ not actual occupancy: scans can cross interval boundaries, and a lane with no
 scans may still have been staffed. The query cannot infer real wait times or
 guarantee the five-minute target from scan logs alone.
 
-The interactive staffing workbook is planned for a later milestone.
+## Power BI pipeline
 
-After installing the dependency, run the generator and SQL checks with:
+Run `python scripts/build_optimizer.py` from any working directory. It executes
+the SQL and writes `data/aggregated_15min.csv` for all three days and
+`data/staffing_15min.csv` with Saturday's modeled staffing estimates. It does
+not create an Excel workbook or a Power BI report.
+
+The default hourly rate is AUD $32.50, target wait 5 minutes, base scan cycle
+6 seconds, exception penalty 60 seconds and flat baseline 3 lanes. Use
+`python scripts/build_optimizer.py --help` to see the input options. For example,
+to model a 4-minute target and a $35 hourly rate:
+
+```shell
+python scripts/build_optimizer.py --target-wait 4 --hourly-rate 35
+```
+
+In Power BI Desktop, choose **Home > Get data > Text/CSV**, select
+`data/staffing_15min.csv`, and load it. For a line chart, put `interval_15m`
+on the X-axis and `total_arrivals`, `static_capacity`, and `dynamic_capacity`
+on the Y-axis. Use `recommended_lanes` for a staffing chart. Load
+`data/aggregated_15min.csv` separately for all-day arrival, surge and exception
+analysis. Ensure `interval_15m` is a Date/Time column and use the column itself,
+not the automatic date hierarchy, on the X-axis.
+
+Staffing values are **fixed at export time**, not interactive Power BI
+parameters. The scenario inputs are included in each staffing row. To change
+a scenario, rerun the command with different options and refresh the CSV
+sources in Power BI. For summary cards, use the maximum of
+`static_max_wait_min` or `dynamic_max_wait_min`, and the sum of the relevant
+labor cost column. For labor as a percentage of revenue, divide summed labor
+cost by summed revenue; do not sum or average the per-interval ratios. The
+`exception_rate_pct` column uses 0–100 units, while the labor/revenue ratios use
+0–1 units. A blank ratio indicates an interval with no revenue.
+
+The model covers Saturday's observed 15-minute intervals, including outside
+the advertised opening hours. It starts with an empty queue,
+uses one staff member per lane, and estimates service time as the base scan
+cycle plus the interval's exception rate times the exception penalty. It treats
+arrivals and service as uniform within each interval. Backlog carries forward;
+estimated wait is the larger of the start and end backlog divided by the
+current interval's service rate. The dynamic lane count is the smallest integer
+meeting the target under those assumptions for that interval. This is a
+per-interval heuristic, not a globally optimal roster or a measured wait.
+
+For the default synthetic data and inputs, the model estimates peak waits of
+0.0 minutes for three flat lanes and 4.3 minutes for dynamic staffing, with
+modeled labor costs of $1,048.13 and $471.25 respectively. This is a scenario
+comparison, not evidence that real queues or costs will match.
+
+Labor cost assumes staffing can change every 15 minutes and excludes paid
+breaks, minimum shifts, setup, and any queue cleanup after the last interval.
+The model does not schedule individual breaks or cap lane recommendations at
+the four observed lanes. Check the maximum lanes and end-of-window queue in the
+CSV, and arrange relief cover and any extra capacity before implementing a
+roster. Changing inputs requires positive rate, target and base cycle;
+nonnegative penalty; and a positive whole-number baseline lane count.
+
+Run the checks with:
 
 ```shell
 python -m unittest discover -s tests
