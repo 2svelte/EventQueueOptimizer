@@ -3,7 +3,7 @@
 This project models check-in demand for a fictional Melbourne exhibition. It is
 a synthetic case study, not a record of Fever's actual operations.
 
-## Current milestone: synthetic scan logs
+## Synthetic scan logs
 
 Run the generator from the repository root with Python 3.10 or later:
 
@@ -29,11 +29,32 @@ observed arrival or queue-entry timestamp. Consequently, these data alone do
 not measure actual guest waiting times. Future analysis and staffing
 recommendations will be modeled estimates, not validated service guarantees.
 
-Run the generator checks with:
+## 15-minute SQL analysis
+
+Install the SQL dependency with `python -m pip install -r requirements.txt`.
+From the repository root, execute the query with DuckDB:
+
+```shell
+python -c "import duckdb; print(duckdb.sql(open('sql/analyze_throughput.sql', encoding='utf-8').read()).fetchall())"
+```
+
+The CSV reader is DuckDB-specific; after importing the CSV as a table,
+PostgreSQL users can replace the `read_csv_auto(...)` source with that table.
+Each day's average and population variance include empty intervals from 10:00
+through 19:45 and extend to any earlier or later scan intervals. Arrival
+percentages use 0–100 units, with exactly 10 minutes early or late classified
+as on time. Metrics that cannot be computed for an empty interval are NULL.
+
+The estimated lane load compares scan seconds starting in the interval with
+15 minutes per observed active lane. It is an approximate bottleneck indicator,
+not actual occupancy: scans can cross interval boundaries, and a lane with no
+scans may still have been staffed. The query cannot infer real wait times or
+guarantee the five-minute target from scan logs alone.
+
+The interactive staffing workbook is planned for a later milestone.
+
+After installing the dependency, run the generator and SQL checks with:
 
 ```shell
 python -m unittest discover -s tests
 ```
-
-SQL aggregation and the interactive staffing workbook are planned for later
-milestones.
