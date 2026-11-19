@@ -8,6 +8,7 @@ WITH scans AS (
         CAST(event_date AS DATE) + CAST(slot_start_time AS TIME) AS slot_start,
         CAST(actual_scan_time AS TIMESTAMP) AS scan_time,
         lane_id,
+        ticket_type,
         CAST(ticket_price_aud AS DECIMAL(10, 2)) AS ticket_price_aud,
         issue_flag,
         CAST(scan_duration_sec AS INTEGER) AS scan_duration_sec
@@ -48,6 +49,18 @@ aggregated AS (
         i.interval_15m,
         count(s.scan_time) AS total_arrivals,
         coalesce(sum(s.ticket_price_aud), 0) AS gross_revenue_aud,
+        count(CASE WHEN s.ticket_type = 'Standard' THEN 1 END) AS standard_tickets,
+        count(CASE WHEN s.ticket_type = 'VIP' THEN 1 END) AS vip_tickets,
+        count(CASE WHEN s.ticket_type = 'Walk-up' THEN 1 END) AS walkup_tickets,
+        coalesce(sum(CASE WHEN s.ticket_type = 'Standard' THEN s.ticket_price_aud END), 0)
+            AS standard_revenue_aud,
+        coalesce(sum(CASE WHEN s.ticket_type = 'VIP' THEN s.ticket_price_aud END), 0)
+            AS vip_revenue_aud,
+        coalesce(sum(CASE WHEN s.ticket_type = 'Walk-up' THEN s.ticket_price_aud END), 0)
+            AS walkup_revenue_aud,
+        count(CASE WHEN s.issue_flag = 'Screenshot_QR' THEN 1 END) AS screenshot_qr_count,
+        count(CASE WHEN s.issue_flag = 'Wrong_Slot' THEN 1 END) AS wrong_slot_count,
+        count(CASE WHEN s.issue_flag = 'Dead_Battery' THEN 1 END) AS dead_battery_count,
         -- Percentages use 0-100 units; exactly +/-10 minutes is on time.
         100.0 * sum(CASE WHEN s.scan_time < s.slot_start - INTERVAL '10 minutes'
                          THEN 1 ELSE 0 END) / nullif(count(s.scan_time), 0)
@@ -96,6 +109,15 @@ SELECT
     total_arrivals / nullif(daily_avg_arrivals, 0) AS arrival_surge_ratio,
     daily_avg_arrivals,
     daily_arrival_variance,
-    estimated_lane_load_pct
+    estimated_lane_load_pct,
+    standard_tickets,
+    vip_tickets,
+    walkup_tickets,
+    standard_revenue_aud,
+    vip_revenue_aud,
+    walkup_revenue_aud,
+    screenshot_qr_count,
+    wrong_slot_count,
+    dead_battery_count
 FROM daily_stats
 ORDER BY event_date, interval_15m;

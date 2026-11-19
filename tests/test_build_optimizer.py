@@ -26,6 +26,15 @@ def interval(hour, minute, arrivals, exception_rate, revenue=0, day=14):
         "ontime_arrival_pct": None,
         "late_arrival_pct": None,
         "arrival_surge_ratio": None,
+        "standard_tickets": 0,
+        "vip_tickets": 0,
+        "walkup_tickets": 0,
+        "standard_revenue_aud": 0,
+        "vip_revenue_aud": 0,
+        "walkup_revenue_aud": 0,
+        "screenshot_qr_count": 0,
+        "wrong_slot_count": 0,
+        "dead_battery_count": 0,
     }
 
 
@@ -52,10 +61,19 @@ class OptimizerTests(unittest.TestCase):
         fields = (
             "event_date", "interval_15m", "early_arrival_pct",
             "ontime_arrival_pct", "late_arrival_pct", "arrival_surge_ratio",
+            "standard_tickets", "vip_tickets", "walkup_tickets",
+            "standard_revenue_aud", "vip_revenue_aud", "walkup_revenue_aud",
+            "screenshot_qr_count", "wrong_slot_count", "dead_battery_count",
         )
+        self.assertEqual(len(staffing_rows[0]), 38)
+        ticket_fields = ("standard_tickets", "vip_tickets", "walkup_tickets")
+        error_fields = ("screenshot_qr_count", "wrong_slot_count", "dead_battery_count")
+        self.assertEqual(sum(sum(int(row[field]) for field in ticket_fields) for row in staffing_rows), 10000)
+        self.assertEqual(sum(sum(int(row[field]) for field in error_fields) for row in staffing_rows), 900)
         for aggregate, staffing in zip(aggregated_rows, staffing_rows):
             for field in fields:
                 self.assertEqual(staffing[field], aggregate[field])
+            self.assertEqual(sum(int(staffing[field]) for field in ticket_fields), int(staffing["total_arrivals"]))
         saturday = [row for row in staffing_rows if row["event_date"] == "2026-11-14"]
         self.assertEqual(sum(int(row["total_arrivals"]) for row in saturday), 3800)
         self.assertAlmostEqual(sum(float(row["static_labor_cost_aud"]) for row in saturday), 1048.125)

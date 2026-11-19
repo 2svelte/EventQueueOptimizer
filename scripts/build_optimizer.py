@@ -13,6 +13,17 @@ RAW = ROOT / "data" / "raw_ticket_scans.csv"
 SQL_PATH = ROOT / "sql" / "analyze_throughput.sql"
 AGGREGATED = ROOT / "data" / "aggregated_15min.csv"
 STAFFING = ROOT / "data" / "staffing_15min.csv"
+BREAKDOWN_FIELDS = (
+    "standard_tickets",
+    "vip_tickets",
+    "walkup_tickets",
+    "standard_revenue_aud",
+    "vip_revenue_aud",
+    "walkup_revenue_aud",
+    "screenshot_qr_count",
+    "wrong_slot_count",
+    "dead_battery_count",
+)
 STAFFING_FIELDS = (
     "event_date",
     "day_of_week",
@@ -43,7 +54,7 @@ STAFFING_FIELDS = (
     "dynamic_labor_cost_aud",
     "static_labor_revenue_ratio",
     "dynamic_labor_revenue_ratio",
-)
+) + BREAKDOWN_FIELDS
 
 
 def positive_float(text):
@@ -155,6 +166,7 @@ def staffing_rows(rows, hourly_rate, target_wait, base_cycle, exception_penalty,
             "dynamic_labor_cost_aud": dynamic_cost,
             "static_labor_revenue_ratio": static_cost / float(revenue) if revenue else None,
             "dynamic_labor_revenue_ratio": dynamic_cost / float(revenue) if revenue else None,
+            **{field: row[field] for field in BREAKDOWN_FIELDS},
         })
         static_queue, dynamic_queue = static_end, dynamic_end
     return result

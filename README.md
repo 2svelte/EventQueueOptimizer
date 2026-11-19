@@ -71,7 +71,9 @@ In Power BI Desktop, choose **Home > Get data > Text/CSV**, select
 `data/staffing_15min.csv`, and load it. For a line chart, put `interval_15m`
 on the X-axis and `total_arrivals`, `static_capacity`, and `dynamic_capacity`
 on the Y-axis. Use `recommended_lanes` for a staffing chart. The staffing table
-also includes arrival timing percentages, surge ratio and exception rate.
+also includes arrival timing percentages, surge ratio, exception rate, ticket
+counts and revenue by type, and counts by error type. Counts and revenue are
+zero for intervals without scans.
 Ensure `interval_15m` is a Date/Time column and use the column itself,
 not the automatic date hierarchy, on the X-axis.
 
