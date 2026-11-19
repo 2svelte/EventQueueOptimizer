@@ -55,8 +55,8 @@ guarantee the five-minute target from scan logs alone.
 
 Run `python scripts/build_optimizer.py` from any working directory. It executes
 the SQL and writes `data/aggregated_15min.csv` for all three days and
-`data/staffing_15min.csv` with Saturday's modeled staffing estimates. It does
-not create an Excel workbook or a Power BI report.
+`data/staffing_15min.csv` with modeled staffing estimates for all three days.
+It does not create an Excel workbook or a Power BI report.
 
 The default hourly rate is AUD $32.50, target wait 5 minutes, base scan cycle
 6 seconds, exception penalty 60 seconds and flat baseline 3 lanes. Use
@@ -70,9 +70,9 @@ python scripts/build_optimizer.py --target-wait 4 --hourly-rate 35
 In Power BI Desktop, choose **Home > Get data > Text/CSV**, select
 `data/staffing_15min.csv`, and load it. For a line chart, put `interval_15m`
 on the X-axis and `total_arrivals`, `static_capacity`, and `dynamic_capacity`
-on the Y-axis. Use `recommended_lanes` for a staffing chart. Load
-`data/aggregated_15min.csv` separately for all-day arrival, surge and exception
-analysis. Ensure `interval_15m` is a Date/Time column and use the column itself,
+on the Y-axis. Use `recommended_lanes` for a staffing chart. The staffing table
+also includes arrival timing percentages, surge ratio and exception rate.
+Ensure `interval_15m` is a Date/Time column and use the column itself,
 not the automatic date hierarchy, on the X-axis.
 
 Staffing values are **fixed at export time**, not interactive Power BI
@@ -85,20 +85,21 @@ cost by summed revenue; do not sum or average the per-interval ratios. The
 `exception_rate_pct` column uses 0–100 units, while the labor/revenue ratios use
 0–1 units. A blank ratio indicates an interval with no revenue.
 
-The model covers Saturday's observed 15-minute intervals, including outside
-the advertised opening hours. It starts with an empty queue,
+The model covers all three days' 15-minute intervals, including outside
+the advertised opening hours. Each day starts with an empty queue,
 uses one staff member per lane, and estimates service time as the base scan
 cycle plus the interval's exception rate times the exception penalty. It treats
-arrivals and service as uniform within each interval. Backlog carries forward;
-estimated wait is the larger of the start and end backlog divided by the
-current interval's service rate. The dynamic lane count is the smallest integer
-meeting the target under those assumptions for that interval. This is a
-per-interval heuristic, not a globally optimal roster or a measured wait.
+arrivals and service as uniform within each interval. Backlog carries forward
+within each day and resets at the start of the next. Estimated wait is the
+larger of the start and end backlog divided by the current interval's service
+rate. The dynamic lane count is the smallest integer meeting the target under
+those assumptions for that interval. This is a per-interval heuristic, not a
+globally optimal roster or a measured wait.
 
-For the default synthetic data and inputs, the model estimates peak waits of
-0.0 minutes for three flat lanes and 4.3 minutes for dynamic staffing, with
-modeled labor costs of $1,048.13 and $471.25 respectively. This is a scenario
-comparison, not evidence that real queues or costs will match.
+For Saturday with the default synthetic data and inputs, the model estimates
+peak waits of 0.0 minutes for three flat lanes and 4.3 minutes for dynamic
+staffing, with modeled labor costs of $1,048.13 and $471.25 respectively.
+This is a scenario comparison, not evidence that real queues or costs will match.
 
 Labor cost assumes staffing can change every 15 minutes and excludes paid
 breaks, minimum shifts, setup, and any queue cleanup after the last interval.

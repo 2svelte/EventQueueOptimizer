@@ -3,7 +3,6 @@
 import argparse
 import csv
 import math
-from datetime import date
 from pathlib import Path
 
 import duckdb
@@ -14,14 +13,16 @@ RAW = ROOT / "data" / "raw_ticket_scans.csv"
 SQL_PATH = ROOT / "sql" / "analyze_throughput.sql"
 AGGREGATED = ROOT / "data" / "aggregated_15min.csv"
 STAFFING = ROOT / "data" / "staffing_15min.csv"
-SATURDAY = date(2026, 11, 14)
-
 STAFFING_FIELDS = (
     "event_date",
     "day_of_week",
     "interval_15m",
     "total_arrivals",
     "gross_revenue_aud",
+    "early_arrival_pct",
+    "ontime_arrival_pct",
+    "late_arrival_pct",
+    "arrival_surge_ratio",
     "exception_rate_pct",
     "hourly_rate_aud",
     "target_wait_min",
@@ -82,17 +83,19 @@ def load_aggregates():
 
 
 def staffing_rows(rows, hourly_rate, target_wait, base_cycle, exception_penalty, baseline_lanes):
-    saturday = sorted(
-        (row for row in rows if row["event_date"] == SATURDAY),
-        key=lambda row: row["interval_15m"],
-    )
-    if not saturday:
-        raise ValueError(f"No intervals found for Saturday {SATURDAY}")
+    intervals = sorted(rows, key=lambda row: (row["event_date"], row["interval_15m"]))
+    if not intervals:
+        raise ValueError("No intervals found for staffing")
 
     static_queue = 0.0
     dynamic_queue = 0.0
+    current_date = None
     result = []
-    for row in saturday:
+    for row in intervals:
+        if row["event_date"] != current_date:
+            static_queue = 0.0
+            dynamic_queue = 0.0
+            current_date = row["event_date"]
         arrivals = row["total_arrivals"]
         revenue = row["gross_revenue_aud"]
         exception_rate = row["exception_rate_pct"]
@@ -128,6 +131,10 @@ def staffing_rows(rows, hourly_rate, target_wait, base_cycle, exception_penalty,
             "interval_15m": row["interval_15m"],
             "total_arrivals": arrivals,
             "gross_revenue_aud": revenue,
+            "early_arrival_pct": row["early_arrival_pct"],
+            "ontime_arrival_pct": row["ontime_arrival_pct"],
+            "late_arrival_pct": row["late_arrival_pct"],
+            "arrival_surge_ratio": row["arrival_surge_ratio"],
             "exception_rate_pct": exception_rate,
             "hourly_rate_aud": hourly_rate,
             "target_wait_min": target_wait,
@@ -193,7 +200,7 @@ def main(argv=None):
     write_csv(AGGREGATED, columns, rows)
     write_csv(STAFFING, STAFFING_FIELDS, staffing)
     print(f"Wrote {len(rows)} intervals to {AGGREGATED}")
-    print(f"Wrote {len(staffing)} Saturday staffing estimates to {STAFFING}")
+    print(f"Wrote {len(staffing)} staffing estimates to {STAFFING}")
 
 
 if __name__ == "__main__":

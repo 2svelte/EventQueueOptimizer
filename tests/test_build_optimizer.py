@@ -3,7 +3,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr
-from datetime import datetime
+from datetime import date, datetime
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -14,19 +14,23 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import build_optimizer
 
 
-def interval(hour, minute, arrivals, exception_rate, revenue=0):
+def interval(hour, minute, arrivals, exception_rate, revenue=0, day=14):
     return {
-        "event_date": build_optimizer.SATURDAY,
-        "day_of_week": "Saturday",
-        "interval_15m": datetime(2026, 11, 14, hour, minute),
+        "event_date": date(2026, 11, day),
+        "day_of_week": date(2026, 11, day).strftime("%A"),
+        "interval_15m": datetime(2026, 11, day, hour, minute),
         "total_arrivals": arrivals,
         "gross_revenue_aud": revenue,
         "exception_rate_pct": exception_rate,
+        "early_arrival_pct": None,
+        "ontime_arrival_pct": None,
+        "late_arrival_pct": None,
+        "arrival_surge_ratio": None,
     }
 
 
 class OptimizerTests(unittest.TestCase):
-    def test_pipeline_exports_all_days_and_default_saturday_model(self):
+    def test_pipeline_exports_all_days_and_preserves_saturday_model(self):
         with tempfile.TemporaryDirectory() as directory:
             aggregated = Path(directory) / "aggregated.csv"
             staffing = Path(directory) / "staffing.csv"
@@ -39,15 +43,44 @@ class OptimizerTests(unittest.TestCase):
             with staffing.open(newline="", encoding="utf-8") as file:
                 staffing_rows = list(csv.DictReader(file))
         self.assertEqual(sum(int(row["total_arrivals"]) for row in aggregated_rows), 10000)
-        self.assertEqual(sum(int(row["total_arrivals"]) for row in staffing_rows), 3800)
-        self.assertTrue(all(row["event_date"] == "2026-11-14" for row in staffing_rows))
-        self.assertEqual(len(staffing_rows), sum(
-            row["event_date"] == "2026-11-14" for row in aggregated_rows
-        ))
-        self.assertAlmostEqual(sum(float(row["static_labor_cost_aud"]) for row in staffing_rows), 1048.125)
-        self.assertAlmostEqual(sum(float(row["dynamic_labor_cost_aud"]) for row in staffing_rows), 471.25)
-        self.assertAlmostEqual(max(float(row["dynamic_max_wait_min"]) for row in staffing_rows), 4.3)
+        self.assertEqual(len(aggregated_rows), 129)
+        self.assertEqual(len(staffing_rows), 129)
+        self.assertEqual(
+            {row["event_date"] for row in staffing_rows},
+            {"2026-11-13", "2026-11-14", "2026-11-15"},
+        )
+        fields = (
+            "event_date", "interval_15m", "early_arrival_pct",
+            "ontime_arrival_pct", "late_arrival_pct", "arrival_surge_ratio",
+        )
+        for aggregate, staffing in zip(aggregated_rows, staffing_rows):
+            for field in fields:
+                self.assertEqual(staffing[field], aggregate[field])
+        saturday = [row for row in staffing_rows if row["event_date"] == "2026-11-14"]
+        self.assertEqual(sum(int(row["total_arrivals"]) for row in saturday), 3800)
+        self.assertAlmostEqual(sum(float(row["static_labor_cost_aud"]) for row in saturday), 1048.125)
+        self.assertAlmostEqual(sum(float(row["dynamic_labor_cost_aud"]) for row in saturday), 471.25)
+        self.assertAlmostEqual(max(float(row["dynamic_max_wait_min"]) for row in saturday), 4.3)
         self.assertTrue(all(float(row["dynamic_max_wait_min"]) <= 5 for row in staffing_rows))
+
+    def test_backlogs_carry_within_day_but_reset_between_days(self):
+        rows = [
+            interval(10, 0, 0, None, day=14),
+            interval(10, 15, 100, 0, day=13),
+            interval(10, 0, 100, 0, day=13),
+            interval(10, 0, 0, None, day=15),
+        ]
+        first, second, saturday, sunday = build_optimizer.staffing_rows(rows, 32, 5, 20, 0, 1)
+        self.assertGreater(first["static_end_queue"], 0)
+        self.assertGreater(first["dynamic_end_queue"], 0)
+        self.assertEqual(second["static_start_queue"], first["static_end_queue"])
+        self.assertEqual(second["dynamic_start_queue"], first["dynamic_end_queue"])
+        self.assertGreater(second["static_end_queue"], 0)
+        self.assertGreater(second["dynamic_end_queue"], 0)
+        for row in (saturday, sunday):
+            self.assertEqual(row["static_start_queue"], 0)
+            self.assertEqual(row["dynamic_start_queue"], 0)
+            self.assertEqual(row["recommended_lanes"], 0)
 
     def test_backlog_carryover_minimum_lanes_and_empty_interval(self):
         rows = [
