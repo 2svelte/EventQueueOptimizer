@@ -1,7 +1,7 @@
-# Fever Melbourne - Onsite Operations Optimizer
+# Event Queue Optimizer
 
 This project models check-in demand for a fictional Melbourne exhibition. It is
-a synthetic case study, not a record of Fever's actual operations.
+a synthetic case study, not a record of actual operations.
 
 ## Synthetic scan logs
 
