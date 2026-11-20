@@ -87,6 +87,68 @@ cost by summed revenue; do not sum or average the per-interval ratios. The
 `exception_rate_pct` column uses 0–100 units, while the labor/revenue ratios use
 0–1 units. A blank ratio indicates an interval with no revenue.
 
+## Predictive workforce forecast
+
+Install the requirements and run the forecast from any working directory:
+
+```shell
+python src/forecast_pipeline.py
+python src/forecast_pipeline.py --input data/staffing_15min.csv --output data/forecast_15min.csv --ticket-multiplier 1.10
+```
+
+Default paths are relative to the repository; explicitly supplied paths are
+relative to the current working directory. The positive ticket multiplier
+adjusts forecast demand (1.10 means 10% more); it does not change the
+exception-rate forecast. The CSV contains one row per weekday and time slot,
+including forecast arrivals and exception percentage, raw and smoothed lane
+counts, modeled maximum wait, and AUD labor cost. The terminal summarizes
+arrivals, peak wait, lane-hours and labor cost by weekday.
+
+The pipeline uses weekday one-hot indicators and time-of-day features,
+including sine and cosine, to train two gradient-boosted 85th-quantile
+regressors. If every weekday/slot occurs only once, it creates 12 reproducible
+synthetic observations per slot with normal arrival variation (12% standard
+deviation) and exception-rate jitter (standard deviation 1.5 percentage
+points, bounded to +/-3 and to 0–100%). Otherwise it trains on the observed
+rows. Arrivals are clipped at zero, multiplied, and rounded up to whole guests.
+These synthetic variations and model quantiles are assumptions, not validated
+prediction intervals; historical scan timestamps are only arrival proxies.
+Use multiple representative weeks and out-of-sample validation before relying
+on the results.
+
+For exception percentage `p`, one lane serves `900 / (6 + 30 * p / 100)`
+guests per 15 minutes. For each day, the raw roster chooses the fewest of 1–5
+lanes with forecast arrivals at most 80% of capacity and modeled wait strictly
+below five minutes. In the uniform-arrival fluid model, end backlog is
+`max(0, start backlog + arrivals - capacity)` and peak wait is the larger of
+start and end backlog divided by the current service rate. Backlog resets at
+the start of each weekday. Infeasible five-lane forecasts cause an error rather
+than an SLA claim. Intervals within each weekday must be contiguous and aligned
+to quarter hours; ISO timestamps must match the stated weekday. Repeated
+weekday/slot observations represent different weeks; duplicate timestamps are
+rejected.
+
+With an empty starting queue, the 80% buffer and uniform-arrival assumption
+normally produce zero modeled wait in every interval. This does not account
+for bursts within an interval or individual guest arrival and service times.
+
+Internal one-lane gaps of up to 180 minutes between elevated-lane intervals
+are bridged at the larger neighboring lane count; gaps before the first or
+after the last surge remain at one lane. The final roster is resimulated.
+This is a roster-smoothing heuristic, **not** a determination of compliance
+with Australian Fair Work rules, minimum shifts, breaks, or an award. Labor
+cost uses historical `dynamic_labor_cost_aud / recommended_lanes` per interval,
+averaged across weeks. For a zero-lane historical row, the source hourly rate
+is used if present, or an unambiguous single-lane rate from other rows; an
+unknown rate is rejected. Blank exception rates are accepted only for
+zero-arrival rows and treated as zero.
+
+In Power BI Desktop, choose **Home > Get data > Text/CSV**, select
+`data/forecast_15min.csv`, and load it. Set `Time_Slot` to Time and use
+`day_of_week` to filter or group charts. Sum forecast arrivals and labor cost;
+use the maximum wait and sum lanes divided by four for lane-hours. Rerun the
+pipeline and refresh Power BI after changing the input or multiplier.
+
 The model covers all three days' 15-minute intervals, including outside
 the advertised opening hours. Each day starts with an empty queue,
 uses one staff member per lane, and estimates service time as the base scan
